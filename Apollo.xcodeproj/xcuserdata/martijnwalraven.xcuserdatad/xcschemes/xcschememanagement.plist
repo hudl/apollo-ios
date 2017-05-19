@@ -9,7 +9,7 @@
 			<key>orderHint</key>
 			<integer>0</integer>
 		</dict>
-		<key>ApolloPerformanceTests.xcscheme</key>
+		<key>ApolloPerformanceTests.xcscheme_^#shared#^_</key>
 		<dict>
 			<key>orderHint</key>
 			<integer>1</integer>
@@ -43,6 +43,21 @@
 			<true/>
 		</dict>
 		<key>3C4DBD011DD21D53005B61D0</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>9F8A95771EC0FC1200304A2D</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>9F98C81C1EC083CA00FFD919</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>9FA6ABBB1EC0A988000017BE</key>
 		<dict>
 			<key>primary</key>
 			<true/>
