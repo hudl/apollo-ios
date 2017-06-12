@@ -26,7 +26,6 @@ Pod::Spec.new do |s|
   # those who require cache persistence. Third-party caches may use different storage mechanisms.
   s.subspec 'SQLite' do |ss|
     ss.source_files = 'Sources/ApolloSQLite/*.swift'
-    ss.dependency 'Apollo/Core'
     ss.dependency 'SQLite.swift'
   end
 end
