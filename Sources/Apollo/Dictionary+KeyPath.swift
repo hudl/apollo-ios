@@ -36,6 +36,9 @@ extension Dictionary where Key: StringProtocol {
           // Invalid key path, abort.
           return nil
         }
+      case .some(_, _):
+        assertionFailure("This is a hack we put in for Swift 3.2 compatibility. It shouldn't be hit. Contact BriCly")
+        return nil
       }
     }
     
@@ -60,6 +63,8 @@ extension Dictionary where Key: StringProtocol {
           // Invalid keyPath
           return
         }
+      case .some(_, _):
+        assertionFailure("This is a hack we put in for Swift 3.2 compatibility. It shouldn't be hit. Contact BriCly")
       }
     }
   }
