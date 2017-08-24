@@ -148,7 +148,7 @@ class ParseQueryResponseTests: XCTestCase {
     let (result, _) = try response.parseResult().await()
     
     XCTAssertEqual(result.data?.hero?.name, "R2-D2")
-    let friendsNames = result.data?.hero?.friends?.flatMap { $0?.name }
+    let friendsNames = result.data?.hero?.fragments.friendsNames.friends?.flatMap { $0?.name }
     XCTAssertEqual(friendsNames, ["Luke Skywalker", "Han Solo", "Leia Organa"])
   }
 
@@ -275,6 +275,37 @@ class ParseQueryResponseTests: XCTestCase {
     }
     
     XCTAssertEqual(human.height, 1.72)
+  }
+  
+  func testHumanQueryWithNullResult() throws {
+    let query = HumanQuery(id: "9999")
+    
+    let response = GraphQLResponse(operation: query, body: [
+      "data": [
+        "human": NSNull()
+      ]
+    ])
+    
+    let (result, _) = try response.parseResult().await()
+    
+    XCTAssertNil(result.data?.human)
+  }
+  
+  func testHumanQueryWithMissingResult() throws {
+    let query = HumanQuery(id: "9999")
+    
+    let response = GraphQLResponse(operation: query, body: [
+      "data": [:]
+    ])
+    
+    XCTAssertThrowsError(try response.parseResult().await()) { error in
+      if case let error as GraphQLResultError = error {
+        XCTAssertEqual(error.path, ["human"])
+        XCTAssertMatch(error.underlying, JSONDecodingError.missingValue)
+      } else {
+        XCTFail("Unexpected error: \(error)")
+      }
+    }
   }
   
   // MARK: Mutations

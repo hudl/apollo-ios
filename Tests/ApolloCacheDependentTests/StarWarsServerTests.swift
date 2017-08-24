@@ -31,11 +31,24 @@ class StarWarsServerTests: XCTestCase {
       XCTAssertEqual(friendsNames, ["Luke Skywalker", "Han Solo", "Leia Organa"])
     }
   }
+  
+  func testHeroFriendsOfFriendsNamesQuery() {
+    fetch(query: HeroFriendsOfFriendsNamesQuery()) { data in
+      let friendsOfFirstFriendNames = data.hero?.friends?.first??.friends?.flatMap { $0?.name }
+      XCTAssertEqual(friendsOfFirstFriendNames, ["Han Solo", "Leia Organa", "C-3PO", "R2-D2"])
+    }
+  }
 
-  func testHumanWithNullMassQuery() {
-    fetch(query: HumanWithNullMassQuery()) { data in
+  func testHumanQueryWithNullMass() {
+    fetch(query: HumanQuery(id: "1004")) { data in
       XCTAssertEqual(data.human?.name, "Wilhuff Tarkin")
       XCTAssertNil(data.human?.mass)
+    }
+  }
+  
+  func testHumanQueryWithNullResult() {
+    fetch(query: HumanQuery(id: "9999")) { data in
+      XCTAssertNil(data.human)
     }
   }
 
@@ -158,7 +171,7 @@ class StarWarsServerTests: XCTestCase {
         completionHandler(data)
       }
       
-      waitForExpectations(timeout: 1, handler: nil)
+      waitForExpectations(timeout: 5, handler: nil)
     }
   }
 
@@ -185,7 +198,7 @@ class StarWarsServerTests: XCTestCase {
         completionHandler(data)
       }
       
-      waitForExpectations(timeout: 1, handler: nil)
+      waitForExpectations(timeout: 5, handler: nil)
     }
   }
 }

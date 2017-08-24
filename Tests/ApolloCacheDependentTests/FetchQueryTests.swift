@@ -39,7 +39,49 @@ class FetchQueryTests: XCTestCase {
         XCTAssertEqual(result.data?.hero?.name, "Luke Skywalker")
       }
 
-      self.waitForExpectations(timeout: 1, handler: nil)
+      self.waitForExpectations(timeout: 5, handler: nil)
+    }
+  }
+  
+  func testReturnCacheDataAndFetch() throws {
+    let query = HeroNameQuery()
+    
+    let initialRecords: RecordSet = [
+      "QUERY_ROOT": ["hero": Reference(key: "hero")],
+      "hero": [
+        "name": "R2-D2",
+        "__typename": "Droid",
+      ]
+    ]
+    
+    withCache(initialRecords: initialRecords) { cache in
+      let store = ApolloStore(cache: cache)
+      
+      let networkTransport = MockNetworkTransport(body: [
+        "data": [
+          "hero": [
+            "name": "Luke Skywalker",
+            "__typename": "Human"
+          ]
+        ]
+        ])
+      
+      let client = ApolloClient(networkTransport: networkTransport, store: store)
+      
+      let expectation = self.expectation(description: "Fetching query")
+      
+      client.fetch(query: query, cachePolicy: .returnCacheDataAndFetch) { (result, error) in
+        // ignore first result assuming from cache, and then make sure we get fetched result
+        if result?.data?.hero?.name != "R2-D2" {
+          defer { expectation.fulfill() }
+          
+          guard let result = result else { XCTFail("No query result");  return }
+          
+          XCTAssertEqual(result.data?.hero?.name, "Luke Skywalker")
+        }
+      }
+      
+      self.waitForExpectations(timeout: 5, handler: nil)
     }
   }
   
@@ -78,7 +120,7 @@ class FetchQueryTests: XCTestCase {
         XCTAssertEqual(result.data?.hero?.name, "R2-D2")
       }
 
-      self.waitForExpectations(timeout: 1, handler: nil)
+      self.waitForExpectations(timeout: 5, handler: nil)
     }
   }
   
@@ -116,7 +158,7 @@ class FetchQueryTests: XCTestCase {
         XCTAssertEqual(result.data?.hero?.name, "Luke Skywalker")
       }
 
-      self.waitForExpectations(timeout: 1, handler: nil)
+      self.waitForExpectations(timeout: 5, handler: nil)
     }
   }
   
@@ -155,7 +197,7 @@ class FetchQueryTests: XCTestCase {
         XCTAssertEqual(result.data?.hero?.name, "R2-D2")
       }
 
-      self.waitForExpectations(timeout: 1, handler: nil)
+      self.waitForExpectations(timeout: 5, handler: nil)
     }
   }
   
@@ -192,7 +234,7 @@ class FetchQueryTests: XCTestCase {
         XCTAssertNil(result)
       }
 
-      self.waitForExpectations(timeout: 1, handler: nil)
+      self.waitForExpectations(timeout: 5, handler: nil)
     }
   }
   
@@ -225,7 +267,7 @@ class FetchQueryTests: XCTestCase {
         XCTAssertNotNil(DispatchQueue.getSpecific(key: key))
       }
 
-      waitForExpectations(timeout: 1, handler: nil)
+      waitForExpectations(timeout: 5, handler: nil)
     }
   }
 }

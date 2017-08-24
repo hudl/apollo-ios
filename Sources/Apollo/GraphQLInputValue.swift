@@ -26,6 +26,12 @@ extension JSONEncodable {
 }
 
 extension Dictionary: GraphQLInputValue {
+  public func evaluate(with variables: [String: JSONEncodable]?) throws -> JSONValue {
+    return try evaluate(with: variables) as JSONObject
+  }
+}
+
+extension Dictionary {
   public func evaluate(with variables: [String: JSONEncodable]?) throws -> JSONObject {
     var jsonObject = JSONObject(minimumCapacity: count)
     for (key, value) in self {
@@ -42,7 +48,19 @@ extension Dictionary: GraphQLInputValue {
   }
 }
 
-public typealias GraphQLMap = [String: JSONEncodable]
+public typealias GraphQLMap = [String: JSONEncodable?]
+
+extension Dictionary where Key == String, Value == JSONEncodable? {
+  public var withNilValuesRemoved: Dictionary<String, JSONEncodable> {
+    var filtered = Dictionary<String, JSONEncodable>(minimumCapacity: count)
+    for (key, value) in self {
+      if value != nil {
+        filtered[key] = value
+      }
+    }
+    return filtered
+  }
+}
 
 public protocol GraphQLMapConvertible: JSONEncodable {
   var graphQLMap: GraphQLMap { get }
@@ -50,7 +68,7 @@ public protocol GraphQLMapConvertible: JSONEncodable {
 
 public extension GraphQLMapConvertible {
   var jsonValue: JSONValue {
-    return graphQLMap.jsonValue
+    return graphQLMap.withNilValuesRemoved.jsonValue
   }
 }
 
