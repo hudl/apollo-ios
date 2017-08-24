@@ -1,7 +1,7 @@
 public typealias Snapshot = [String: Any?]
 
 public protocol GraphQLSelectionSet {
-  static var selections: [Selection] { get }
+  static var selections: [GraphQLSelection] { get }
   static var possibleTypes: [String] { get }
   
   var snapshot: Snapshot { get }
@@ -11,7 +11,7 @@ public protocol GraphQLSelectionSet {
 extension GraphQLSelectionSet {
   init(jsonObject: JSONObject) throws {
     let executor = GraphQLExecutor { object, info in
-      Promise(fulfilled: object[info.responseKeyForField])
+      .result(.success(object[info.responseKeyForField]))
     }
     executor.shouldComputeCachePath = false
     self = try executor.execute(selections: Self.selections, on: jsonObject, accumulator: GraphQLSelectionSetMapper<Self>()).await()
@@ -28,10 +28,10 @@ extension GraphQLSelectionSet {
   }
 }
 
-public protocol Selection {
+public protocol GraphQLSelection {
 }
 
-public struct Field: Selection {
+public struct GraphQLField: GraphQLSelection {
   let name: String
   let alias: String?
   let arguments: [String: GraphQLInputValue]?
@@ -71,7 +71,7 @@ private func orderIndependentKey(for object: JSONObject) -> String {
   }.joined(separator: ",")
 }
 
-public struct FragmentSpread: Selection {
+public struct GraphQLFragmentSpread: GraphQLSelection {
   let fragment: GraphQLFragment.Type
   
   public init(_ fragment: GraphQLFragment.Type) {

@@ -1,3 +1,6 @@
+sudo: false
+dist: trusty
+
 language: objective-c
 
 osx_image: xcode8.3
@@ -40,8 +43,9 @@ cache:
 before_install:
   - (./scripts/install-or-update-starwars-server.sh)
   - (cd ../starwars-server && npm start) &
-  - npm install -g apollo-codegen@next
+  - npm install -g apollo-codegen
 
 script:
   - set -o pipefail
-  - xcodebuild clean build test -project "${TRAVIS_XCODE_PROJECT}" -scheme "${TRAVIS_XCODE_SCHEME}" -sdk "${TRAVIS_XCODE_SDK}" -destination "${DESTINATION}" | xcpretty
+  - xcodebuild clean build build-for-testing -project "${TRAVIS_XCODE_PROJECT}" -scheme "${TRAVIS_XCODE_SCHEME}" -sdk "${TRAVIS_XCODE_SDK}" -destination "${DESTINATION}" | xcpretty
+  - xcodebuild test-without-building -project "${TRAVIS_XCODE_PROJECT}" -scheme "${TRAVIS_XCODE_SCHEME}" -sdk "${TRAVIS_XCODE_SDK}" -destination "${DESTINATION}" | xcpretty
