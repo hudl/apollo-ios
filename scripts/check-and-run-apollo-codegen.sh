@@ -1,5 +1,5 @@
 # Only major and minor version should be specified here
-REQUIRED_APOLLO_CODEGEN_VERSION=0.12
+REQUIRED_APOLLO_CODEGEN_VERSION=0.17
 
 # Part of this code has been adapted from https://github.com/facebook/react-native/blob/master/packager/react-native-xcode.sh
 
@@ -7,7 +7,10 @@ REQUIRED_APOLLO_CODEGEN_VERSION=0.12
 # and relies on environment variables set by Xcode
 
 install_apollo_codegen() {
+  # Exit immediately if the command fails
+  set -e
   npm install -g apollo-codegen@$REQUIRED_APOLLO_CODEGEN_VERSION
+  set +e
 }
 
 # We consider versions to be compatible if the major and minor versions match

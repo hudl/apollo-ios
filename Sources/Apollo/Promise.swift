@@ -1,4 +1,6 @@
-public func whenAll<Value>(_ promises: [Promise<Value>], notifyOn queue: DispatchQueue) -> Promise<[Value]> {
+import Dispatch
+
+public func whenAll<Value>(_ promises: [Promise<Value>], notifyOn queue: DispatchQueue = .global()) -> Promise<[Value]> {
   return Promise { (fulfill, reject) in
     let group = DispatchGroup()
     
@@ -8,14 +10,12 @@ public func whenAll<Value>(_ promises: [Promise<Value>], notifyOn queue: Dispatc
       promise.andThen { value in
         group.leave()
       }.catch { error in
-        queue.async {
-          reject(error)
-        }
+        reject(error)
       }
     }
     
     group.notify(queue: queue) {
-      fulfill(promises.flatMap { $0.result?.value })
+      fulfill(promises.map { $0.result!.value! })
     }
   }
 }
@@ -34,6 +34,10 @@ public final class Promise<Value> {
   
   private typealias ResultHandler<Value> = (Result<Value>) -> Void
   private var resultHandlers: [ResultHandler<Value>] = []
+  
+  public init(resolved result: Result<Value>) {
+    state = .resolved(result)
+  }
   
   public init(fulfilled value: Value) {
     state = .resolved(.success(value))
@@ -60,6 +64,48 @@ public final class Promise<Value> {
     } catch {
       self.reject(error)
     }
+  }
+  
+  public var isPending: Bool {
+    return lock.withLock {
+      state.isPending
+    }
+  }
+  
+  public var result: Result<Value>? {
+    return lock.withLock {
+      switch state {
+      case .pending:
+        return nil
+      case .resolved(let result):
+        return result
+      }
+    }
+  }
+  
+  public func wait() {
+    let semaphore = DispatchSemaphore(value: 0)
+    
+    whenResolved { result in
+      semaphore.signal()
+    }
+    
+    semaphore.wait()
+  }
+  
+  public func await() throws -> Value {
+    let semaphore = DispatchSemaphore(value: 0)
+    
+    var result: Result<Value>? = nil
+    
+    whenResolved {
+      result = $0
+      semaphore.signal()
+    }
+    
+    semaphore.wait()
+    
+    return try result!.valueOrError()
   }
   
   @discardableResult public func andThen(_ whenFulfilled: @escaping (Value) throws -> Void) -> Promise<Value> {
@@ -152,48 +198,6 @@ public final class Promise<Value> {
         }
       }
     }
-  }
-  
-  public var isPending: Bool {
-    return lock.withLock {
-      state.isPending
-    }
-  }
-  
-  public var result: Result<Value>? {
-    return lock.withLock {
-      switch state {
-      case .pending:
-        return nil
-      case .resolved(let result):
-        return result
-      }
-    }
-  }
-  
-  public func wait() {
-    let semaphore = DispatchSemaphore(value: 0)
-    
-    whenResolved { result in
-      semaphore.signal()
-    }
-    
-    semaphore.wait()
-  }
-  
-  public func await() throws -> Value {
-    let semaphore = DispatchSemaphore(value: 0)
-    
-    var result: Result<Value>? = nil
-    
-    whenResolved {
-      result = $0
-      semaphore.signal()
-    }
-    
-    semaphore.wait()
-    
-    return try result!.valueOrError()
   }
   
   private func fulfill(_ value: Value) {

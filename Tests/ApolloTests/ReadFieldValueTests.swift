@@ -4,8 +4,7 @@ import ApolloTestSupport
 import StarWarsAPI
 
 private struct MockSelectionSet: GraphQLSelectionSet {
-  public static let selections: [Selection] = []
-  static var possibleTypes = ["Mock"]
+  public static let selections: [GraphQLSelection] = []
   
   public var snapshot: Snapshot
   
@@ -14,9 +13,9 @@ private struct MockSelectionSet: GraphQLSelectionSet {
   }
 }
 
-func readFieldValue(_ field: Field, from object: JSONObject) throws -> Any? {
+func readFieldValue(_ field: GraphQLField, from object: JSONObject) throws -> Any? {
   let executor = GraphQLExecutor { object, info in
-    return Promise(fulfilled: object[info.responseKeyForField])
+    return .result(.success(object[info.responseKeyForField]))
   }
   
   return try executor.execute(selections: [field], on: object, withKey: "", variables: [:], accumulator: GraphQLSelectionSetMapper<MockSelectionSet>()).await().snapshot[field.responseKey]!
@@ -25,7 +24,7 @@ func readFieldValue(_ field: Field, from object: JSONObject) throws -> Any? {
 class ReadFieldValueTests: XCTestCase {
   func testGetScalar() throws {
     let object: JSONObject = ["name": "Luke Skywalker"]
-    let field = Field("name", type: .nonNull(.scalar(String.self)))
+    let field = GraphQLField("name", type: .nonNull(.scalar(String.self)))
     
     let value = try readFieldValue(field, from: object) as! String
     
@@ -34,7 +33,7 @@ class ReadFieldValueTests: XCTestCase {
   
   func testGetScalarWithMissingKey() {
     let object: JSONObject = [:]
-    let field = Field("name", type: .nonNull(.scalar(String.self)))
+    let field = GraphQLField("name", type: .nonNull(.scalar(String.self)))
     
     XCTAssertThrowsError(try readFieldValue(field, from: object)) { (error) in
       if case let error as GraphQLResultError = error {
@@ -48,7 +47,7 @@ class ReadFieldValueTests: XCTestCase {
   
   func testGetScalarWithNull() throws {
     let object: JSONObject = ["name": NSNull()]
-    let field = Field("name", type: .nonNull(.scalar(String.self)))
+    let field = GraphQLField("name", type: .nonNull(.scalar(String.self)))
     
     XCTAssertThrowsError(try readFieldValue(field, from: object)) { (error) in
       if case let error as GraphQLResultError = error {
@@ -62,7 +61,7 @@ class ReadFieldValueTests: XCTestCase {
   
   func testGetScalarWithWrongType() throws {
     let object: JSONObject = ["name": 10]
-    let field = Field("name", type: .nonNull(.scalar(String.self)))
+    let field = GraphQLField("name", type: .nonNull(.scalar(String.self)))
     
     XCTAssertThrowsError(try readFieldValue(field, from: object)) { (error) in
       if let error = error as? GraphQLResultError, case JSONDecodingError.couldNotConvert(let value, let expectedType) = error.underlying {
@@ -77,7 +76,7 @@ class ReadFieldValueTests: XCTestCase {
   
   func testGetOptionalScalar() throws {
     let object: JSONObject = ["name": "Luke Skywalker"]
-    let field = Field("name", type: .scalar(String.self))
+    let field = GraphQLField("name", type: .scalar(String.self))
     
     let value = try readFieldValue(field, from: object) as! String?
     XCTAssertEqual(value, "Luke Skywalker")
@@ -85,7 +84,7 @@ class ReadFieldValueTests: XCTestCase {
   
   func testGetOptionalScalarWithMissingKey() throws {
     let object: JSONObject = [:]
-    let field = Field("name", type: .scalar(String.self))
+    let field = GraphQLField("name", type: .scalar(String.self))
     
     XCTAssertThrowsError(try readFieldValue(field, from: object)) { (error) in
       if case let error as GraphQLResultError = error {
@@ -99,7 +98,7 @@ class ReadFieldValueTests: XCTestCase {
   
   func testGetOptionalScalarWithNull() throws {
     let object: JSONObject = ["name": NSNull()]
-    let field = Field("name", type: .scalar(String.self))
+    let field = GraphQLField("name", type: .scalar(String.self))
     
     let value = try readFieldValue(field, from: object) as! String?
     
@@ -108,7 +107,7 @@ class ReadFieldValueTests: XCTestCase {
   
   func testGetOptionalScalarWithWrongType() throws {
     let object: JSONObject = ["name": 10]
-    let field = Field("name", type: .scalar(String.self))
+    let field = GraphQLField("name", type: .scalar(String.self))
     
     XCTAssertThrowsError(try readFieldValue(field, from: object)) { (error) in
       if let error = error as? GraphQLResultError, case JSONDecodingError.couldNotConvert(let value, let expectedType) = error.underlying {
@@ -123,7 +122,7 @@ class ReadFieldValueTests: XCTestCase {
   
   func testGetScalarList() throws {
     let object: JSONObject = ["appearsIn": ["NEWHOPE", "EMPIRE", "JEDI"]]
-    let field = Field("appearsIn", type: .nonNull(.list(.nonNull(.scalar(Episode.self)))))
+    let field = GraphQLField("appearsIn", type: .nonNull(.list(.nonNull(.scalar(Episode.self)))))
     
     let value = try readFieldValue(field, from: object) as! [Episode]
     
@@ -132,7 +131,7 @@ class ReadFieldValueTests: XCTestCase {
   
   func testGetEmptyScalarList() throws {
     let object: JSONObject = ["appearsIn": []]
-    let field = Field("appearsIn", type: .nonNull(.list(.nonNull(.scalar(Episode.self)))))
+    let field = GraphQLField("appearsIn", type: .nonNull(.list(.nonNull(.scalar(Episode.self)))))
     
     let value = try readFieldValue(field, from: object) as! [Episode]
     
@@ -141,7 +140,7 @@ class ReadFieldValueTests: XCTestCase {
   
   func testGetScalarListWithMissingKey() {
     let object: JSONObject = [:]
-    let field = Field("appearsIn", type: .nonNull(.list(.nonNull(.scalar(Episode.self)))))
+    let field = GraphQLField("appearsIn", type: .nonNull(.list(.nonNull(.scalar(Episode.self)))))
     
     XCTAssertThrowsError(try readFieldValue(field, from: object)) { (error) in
       if case let error as GraphQLResultError = error {
@@ -155,7 +154,7 @@ class ReadFieldValueTests: XCTestCase {
   
   func testGetScalarListWithNull() throws {
     let object: JSONObject = ["appearsIn": NSNull()]
-    let field = Field("appearsIn", type: .nonNull(.list(.nonNull(.scalar(Episode.self)))))
+    let field = GraphQLField("appearsIn", type: .nonNull(.list(.nonNull(.scalar(Episode.self)))))
     
     XCTAssertThrowsError(try readFieldValue(field, from: object)) { (error) in
       if case let error as GraphQLResultError = error {
@@ -169,7 +168,7 @@ class ReadFieldValueTests: XCTestCase {
   
   func testGetScalarListWithWrongType() throws {
     let object: JSONObject = ["appearsIn": [4, 5, 6]]
-    let field = Field("appearsIn", type: .nonNull(.list(.nonNull(.scalar(Episode.self)))))
+    let field = GraphQLField("appearsIn", type: .nonNull(.list(.nonNull(.scalar(Episode.self)))))
     
     XCTAssertThrowsError(try readFieldValue(field, from: object)) { (error) in
       if let error = error as? GraphQLResultError, case JSONDecodingError.couldNotConvert(let value, let expectedType) = error.underlying {
@@ -184,7 +183,7 @@ class ReadFieldValueTests: XCTestCase {
   
   func testGetOptionalScalarList() throws {
     let object: JSONObject = ["appearsIn": ["NEWHOPE", "EMPIRE", "JEDI"]]
-    let field = Field("appearsIn", type: .list(.nonNull(.scalar(Episode.self))))
+    let field = GraphQLField("appearsIn", type: .list(.nonNull(.scalar(Episode.self))))
     
     let value = try readFieldValue(field, from: object) as! [Episode]?
     
@@ -193,7 +192,7 @@ class ReadFieldValueTests: XCTestCase {
   
   func testGetEmptyOptionalScalarList() throws {
     let object: JSONObject = ["appearsIn": []]
-    let field = Field("appearsIn", type: .list(.nonNull(.scalar(Episode.self))))
+    let field = GraphQLField("appearsIn", type: .list(.nonNull(.scalar(Episode.self))))
     
     let value = try readFieldValue(field, from: object) as! [Episode]
     
@@ -202,7 +201,7 @@ class ReadFieldValueTests: XCTestCase {
   
   func testGetOptionalScalarListWithMissingKey() throws {
     let object: JSONObject = [:]
-    let field = Field("appearsIn", type: .list(.nonNull(.scalar(Episode.self))))
+    let field = GraphQLField("appearsIn", type: .list(.nonNull(.scalar(Episode.self))))
     
     XCTAssertThrowsError(try readFieldValue(field, from: object)) { (error) in
       if case let error as GraphQLResultError = error {
@@ -216,7 +215,7 @@ class ReadFieldValueTests: XCTestCase {
   
   func testGetOptionalScalarListWithNull() throws {
     let object: JSONObject = ["appearsIn": NSNull()]
-    let field = Field("appearsIn", type: .list(.nonNull(.scalar(Episode.self))))
+    let field = GraphQLField("appearsIn", type: .list(.nonNull(.scalar(Episode.self))))
     
     let value = try readFieldValue(field, from: object) as! [Episode]?
     
@@ -225,7 +224,7 @@ class ReadFieldValueTests: XCTestCase {
   
   func testGetOptionalScalarListWithWrongType() throws {
     let object: JSONObject = ["appearsIn": [4, 5, 6]]
-    let field = Field("appearsIn", type: .list(.nonNull(.scalar(Episode.self))))
+    let field = GraphQLField("appearsIn", type: .list(.nonNull(.scalar(Episode.self))))
     
     XCTAssertThrowsError(try readFieldValue(field, from: object)) { (error) in
       if let error = error as? GraphQLResultError, case JSONDecodingError.couldNotConvert(let value, let expectedType) = error.underlying {
@@ -240,7 +239,7 @@ class ReadFieldValueTests: XCTestCase {
   
   func testGetScalarListWithOptionalElements() throws {
     let object: JSONObject = ["appearsIn": ["NEWHOPE", "EMPIRE", "JEDI"]]
-    let field = Field("appearsIn", type: .nonNull(.list(.scalar(Episode.self))))
+    let field = GraphQLField("appearsIn", type: .nonNull(.list(.scalar(Episode.self))))
     
     let value = try readFieldValue(field, from: object) as! [Episode?]
     
@@ -249,7 +248,7 @@ class ReadFieldValueTests: XCTestCase {
   
   func testGetOptionalScalarListWithOptionalElements() throws {
     let object: JSONObject = ["appearsIn": ["NEWHOPE", "EMPIRE", "JEDI"]]
-    let field = Field("appearsIn", type: .list(.scalar(Episode.self)))
+    let field = GraphQLField("appearsIn", type: .list(.scalar(Episode.self)))
     
     let value = try readFieldValue(field, from: object) as! [Episode?]?
     
@@ -258,16 +257,10 @@ class ReadFieldValueTests: XCTestCase {
   
   func testGetOptionalScalarListWithUnknownEnumCase() throws {
     let object: JSONObject = ["appearsIn": ["TWOTOWERS"]]
-    let field = Field("appearsIn", type: .list(.scalar(Episode.self)))
-    
-    XCTAssertThrowsError(try readFieldValue(field, from: object)) { (error) in
-      if let error = error as? GraphQLResultError, case JSONDecodingError.couldNotConvert(let value, let expectedType) = error.underlying {
-        XCTAssertEqual(error.path, ["appearsIn"])
-        XCTAssertEqual(value as? String, "TWOTOWERS")
-        XCTAssertTrue(expectedType == Episode.self)
-      } else {
-        XCTFail("Unexpected error: \(error)")
-      }
-    }
+    let field = GraphQLField("appearsIn", type: .list(.scalar(Episode.self)))
+
+    let value = try readFieldValue(field, from: object) as! [Episode?]?
+
+    XCTAssertEqual(value, [.unknown("TWOTOWERS")] as [Episode?]?)
   }
 }
