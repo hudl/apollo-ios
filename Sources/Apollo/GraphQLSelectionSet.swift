@@ -1,37 +1,36 @@
-public typealias Snapshot = [String: Any?]
+public typealias ResultMap = [String: Any?]
 
 public protocol GraphQLSelectionSet {
-  static var selections: [Selection] { get }
-  static var possibleTypes: [String] { get }
+  static var selections: [GraphQLSelection] { get }
   
-  var snapshot: Snapshot { get }
-  init(snapshot: Snapshot)
+  var resultMap: ResultMap { get }
+  init(unsafeResultMap: ResultMap)
 }
 
-extension GraphQLSelectionSet {
+public extension GraphQLSelectionSet {
   init(jsonObject: JSONObject) throws {
     let executor = GraphQLExecutor { object, info in
-      Promise(fulfilled: object[info.responseKeyForField])
+      .result(.success(object[info.responseKeyForField]))
     }
     executor.shouldComputeCachePath = false
     self = try executor.execute(selections: Self.selections, on: jsonObject, accumulator: GraphQLSelectionSetMapper<Self>()).await()
   }
   
   var jsonObject: JSONObject {
-    return snapshot.jsonObject
+    return resultMap.jsonObject
   }
 }
 
-extension GraphQLSelectionSet {  
+extension GraphQLSelectionSet {
   public init(_ selectionSet: GraphQLSelectionSet) throws {
     try self.init(jsonObject: selectionSet.jsonObject)
   }
 }
 
-public protocol Selection {
+public protocol GraphQLSelection {
 }
 
-public struct Field: Selection {
+public struct GraphQLField: GraphQLSelection {
   let name: String
   let alias: String?
   let arguments: [String: GraphQLInputValue]?
@@ -61,6 +60,22 @@ public struct Field: Selection {
   }
 }
 
+public indirect enum GraphQLOutputType {
+  case scalar(JSONDecodable.Type)
+  case object([GraphQLSelection])
+  case nonNull(GraphQLOutputType)
+  case list(GraphQLOutputType)
+  
+  var namedType: GraphQLOutputType {
+    switch self {
+    case .nonNull(let innerType), .list(let innerType):
+      return innerType.namedType
+    case .scalar, .object:
+      return self
+    }
+  }
+}
+
 private func orderIndependentKey(for object: JSONObject) -> String {
   return object.sorted { $0.key < $1.key }.map {
     if let object = $0.value as? JSONObject {
@@ -71,10 +86,43 @@ private func orderIndependentKey(for object: JSONObject) -> String {
   }.joined(separator: ",")
 }
 
-public struct FragmentSpread: Selection {
+public struct GraphQLBooleanCondition: GraphQLSelection {
+  let variableName: String
+  let inverted: Bool
+  let selections: [GraphQLSelection]
+  
+  public init(variableName: String, inverted: Bool, selections: [GraphQLSelection]) {
+    self.variableName = variableName
+    self.inverted = inverted;
+    self.selections = selections;
+  }
+}
+
+public struct GraphQLTypeCondition: GraphQLSelection {
+  let possibleTypes: [String]
+  let selections: [GraphQLSelection]
+  
+  public init(possibleTypes: [String], selections: [GraphQLSelection]) {
+    self.possibleTypes = possibleTypes
+    self.selections = selections;
+  }
+}
+
+public struct GraphQLFragmentSpread: GraphQLSelection {
   let fragment: GraphQLFragment.Type
   
   public init(_ fragment: GraphQLFragment.Type) {
     self.fragment = fragment
   }
 }
+
+public struct GraphQLTypeCase: GraphQLSelection {
+  let variants: [String: [GraphQLSelection]]
+  let `default`: [GraphQLSelection]
+  
+  public init(variants: [String: [GraphQLSelection]], default: [GraphQLSelection]) {
+    self.variants = variants
+    self.default = `default`;
+  }
+}
+

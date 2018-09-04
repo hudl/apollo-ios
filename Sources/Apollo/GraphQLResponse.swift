@@ -7,7 +7,7 @@ public final class GraphQLResponse<Operation: GraphQLOperation> {
     self.operation = operation
     self.body = body
   }
-
+  
   func parseResult(cacheKeyForObject: CacheKeyForObject? = nil) throws -> Promise<(GraphQLResult<Operation.Data>, RecordSet?)>  {
     let errors: [GraphQLError]?
     
@@ -16,10 +16,10 @@ public final class GraphQLResponse<Operation: GraphQLOperation> {
     } else {
       errors = nil
     }
-
+    
     if let dataEntry = body["data"] as? JSONObject {
       let executor = GraphQLExecutor { object, info in
-        return Promise(fulfilled: object[info.responseKeyForField])
+        return .result(.success(object[info.responseKeyForField]))
       }
       
       executor.cacheKeyForObject = cacheKeyForObject
@@ -29,12 +29,12 @@ public final class GraphQLResponse<Operation: GraphQLOperation> {
       let dependencyTracker = GraphQLDependencyTracker()
       
       return firstly {
-        try executor.execute(selections: Operation.Data.selections, on: dataEntry, withKey: rootKey(forOperation: operation), variables: operation.variables, accumulator: zip(mapper, normalizer, dependencyTracker))
-      }.map { (data, records, dependentKeys) in
-        (GraphQLResult(data: data, errors: errors, dependentKeys: dependentKeys), records)
+        try executor.execute(selections: Operation.Data.selections, on: dataEntry, withKey: rootCacheKey(for: operation), variables: operation.variables, accumulator: zip(mapper, normalizer, dependencyTracker))
+        }.map { (data, records, dependentKeys) in
+          (GraphQLResult(data: data, errors: errors, source: .server, dependentKeys: dependentKeys), records)
       }
     } else {
-      return Promise(fulfilled: (GraphQLResult(data: nil, errors: errors, dependentKeys: nil), nil))
+      return Promise(fulfilled: (GraphQLResult(data: nil, errors: errors, source: .server, dependentKeys: nil), nil))
     }
   }
 }

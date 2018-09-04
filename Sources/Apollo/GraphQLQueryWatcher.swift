@@ -1,3 +1,5 @@
+import Dispatch
+
 /// A `GraphQLQueryWatcher` is responsible for watching the store, and calling the result handler with a new result whenever any of the data the previous result depends on changes.
 public final class GraphQLQueryWatcher<Query: GraphQLQuery>: Cancellable, ApolloStoreSubscriber {
   weak var client: ApolloClient?
@@ -26,7 +28,9 @@ public final class GraphQLQueryWatcher<Query: GraphQLQuery>: Cancellable, Apollo
   }
   
   func fetch(cachePolicy: CachePolicy) {
-    fetching = client?._fetch(query: query, cachePolicy: cachePolicy, context: &context, queue: handlerQueue) { (result, error) in
+    fetching = client?._fetch(query: query, cachePolicy: cachePolicy, context: &context, queue: handlerQueue) { [weak self] (result, error) in
+      guard let `self` = self else { return }
+        
       self.dependentKeys = result?.dependentKeys
       self.resultHandler(result, error)
     }

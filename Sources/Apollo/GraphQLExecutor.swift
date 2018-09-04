@@ -1,5 +1,8 @@
+import Foundation
+import Dispatch
+
 /// A resolver is responsible for resolving a value for a field.
-public typealias GraphQLResolver = (_ object: JSONObject, _ info: GraphQLResolveInfo) -> Promise<JSONValue?>
+public typealias GraphQLResolver = (_ object: JSONObject, _ info: GraphQLResolveInfo) -> ResultOrPromise<JSONValue?>
 
 public struct GraphQLResolveInfo {
   let variables: GraphQLMap?
@@ -10,7 +13,7 @@ public struct GraphQLResolveInfo {
   var cachePath: [String] = []
   var cacheKeyForField: String = ""
   
-  var fields: [Field] = []
+  var fields: [GraphQLField] = []
   
   init(rootKey: CacheKey?, variables: GraphQLMap?) {
     self.variables = variables
@@ -109,7 +112,7 @@ public final class GraphQLExecutor {
     guard let value = cacheKeyForObject?(object) else { return nil }
     
     if let array = value as? [Any?] {
-      return array.flatMap { $0 }.map { String(describing: $0) }.joined(separator: "_")
+      return array.compactMap { String(describing: $0) }.joined(separator: "_")
     } else {
       return String(describing: value)
     }
@@ -117,19 +120,19 @@ public final class GraphQLExecutor {
   
   // MARK: - Execution
   
-  func execute<Accumulator: GraphQLResultAccumulator>(selections: [Selection], on object: JSONObject, withKey key: CacheKey? = nil, variables: GraphQLMap? = nil, accumulator: Accumulator) throws -> Promise<Accumulator.FinalResult> {
+  func execute<Accumulator: GraphQLResultAccumulator>(selections: [GraphQLSelection], on object: JSONObject, withKey key: CacheKey? = nil, variables: GraphQLMap? = nil, accumulator: Accumulator) throws -> Promise<Accumulator.FinalResult> {
     let info = GraphQLResolveInfo(rootKey: key, variables: variables)
     
     return try execute(selections: selections, on: object, info: info, accumulator: accumulator).map {
       try accumulator.finish(rootValue: $0, info: info)
-    }
+    }.asPromise()
   }
   
-  private func execute<Accumulator: GraphQLResultAccumulator>(selections: [Selection], on object: JSONObject, info: GraphQLResolveInfo, accumulator: Accumulator) throws -> Promise<Accumulator.ObjectResult> {
-    var groupedFields = GroupedSequence<String, Field>()
-    collectFields(selections: selections, forRuntimeType: runtimeType(of: object), into: &groupedFields)
+  private func execute<Accumulator: GraphQLResultAccumulator>(selections: [GraphQLSelection], on object: JSONObject, info: GraphQLResolveInfo, accumulator: Accumulator) throws -> ResultOrPromise<Accumulator.ObjectResult> {
+    var groupedFields = GroupedSequence<String, GraphQLField>()
+    try collectFields(selections: selections, forRuntimeType: runtimeType(of: object), into: &groupedFields, info: info)
     
-    var fieldEntries: [Promise<Accumulator.FieldEntry>] = []
+    var fieldEntries: [ResultOrPromise<Accumulator.FieldEntry>] = []
     fieldEntries.reserveCapacity(groupedFields.keys.count)
     
     for (_, fields) in groupedFields {
@@ -152,18 +155,32 @@ public final class GraphQLExecutor {
   }
   
   /// Before execution, the selection set is converted to a grouped field set. Each entry in the grouped field set is a list of fields that share a response key. This ensures all fields with the same response key (alias or field name) included via referenced fragments are executed at the same time.
-  private func collectFields(selections: [Selection], forRuntimeType runtimeType: String?, into groupedFields: inout GroupedSequence<String, Field>) {
+  private func collectFields(selections: [GraphQLSelection], forRuntimeType runtimeType: String?, into groupedFields: inout GroupedSequence<String, GraphQLField>, info: GraphQLResolveInfo) throws {
     for selection in selections {
       switch selection {
-      case let field as Field:
+      case let field as GraphQLField:
         _ = groupedFields.append(value: field, forKey: field.responseKey)
-      case let fragmentSpread as FragmentSpread:
-        let fragment = fragmentSpread.fragment
-                
-        if let runtimeType = runtimeType, fragment.possibleTypes.contains(runtimeType) {
-          let fragmentSelections = fragment.selections
-          collectFields(selections: fragmentSelections, forRuntimeType: runtimeType, into: &groupedFields)
+      case let booleanCondition as GraphQLBooleanCondition:
+        guard let value = info.variables?[booleanCondition.variableName] else {
+          throw GraphQLError("Variable \(booleanCondition.variableName) was not provided.")
         }
+        if value as? Bool == !booleanCondition.inverted {
+          try collectFields(selections: booleanCondition.selections, forRuntimeType: runtimeType, into: &groupedFields, info: info)
+        }
+      case let fragmentSpread as GraphQLFragmentSpread:
+        let fragment = fragmentSpread.fragment
+        
+        if let runtimeType = runtimeType, fragment.possibleTypes.contains(runtimeType) {
+          try collectFields(selections: fragment.selections, forRuntimeType: runtimeType, into: &groupedFields, info: info)
+        }
+      case let typeCase as GraphQLTypeCase:
+        let selections: [GraphQLSelection]
+        if let runtimeType = runtimeType {
+          selections = typeCase.variants[runtimeType] ?? typeCase.default
+        } else {
+          selections = typeCase.default
+        }
+        try collectFields(selections: selections, forRuntimeType: runtimeType, into: &groupedFields, info: info)
       default:
         preconditionFailure()
       }
@@ -171,7 +188,7 @@ public final class GraphQLExecutor {
   }
   
   /// Each field requested in the grouped field set that is defined on the selected objectType will result in an entry in the response map. Field execution first coerces any provided argument values, then resolves a value for the field, and finally completes that value either by recursively executing another selection set or coercing a scalar value.
-  private func execute<Accumulator: GraphQLResultAccumulator>(fields: [Field], on object: JSONObject, info: GraphQLResolveInfo, accumulator: Accumulator) throws -> Promise<Accumulator.FieldEntry> {
+  private func execute<Accumulator: GraphQLResultAccumulator>(fields: [GraphQLField], on object: JSONObject, info: GraphQLResolveInfo, accumulator: Accumulator) throws -> ResultOrPromise<Accumulator.FieldEntry> {
     // GraphQL validation makes sure all fields sharing the same response key have the same arguments and are of the same type, so we only need to resolve one field.
     let firstField = fields[0]
     
@@ -190,44 +207,44 @@ public final class GraphQLExecutor {
     // We still need all fields to complete the value, because they may have different selection sets.
     info.fields = fields
     
-    let promise = resolver(object, info)
+    let resultOrPromise = resolver(object, info)
     
-    return promise.on(queue: queue).flatMap { value in
+    return resultOrPromise.on(queue: queue).flatMap { value in
       guard let value = value else {
         throw JSONDecodingError.missingValue
       }
       
       return try self.complete(value: value, ofType: firstField.type, info: info, accumulator: accumulator)
     }.map {
-        try accumulator.accept(fieldEntry: $0, info: info)
+      try accumulator.accept(fieldEntry: $0, info: info)
     }.catch { error in
       if !(error is GraphQLResultError) {
-       throw GraphQLResultError(path: info.responsePath, underlying: error)
+        throw GraphQLResultError(path: info.responsePath, underlying: error)
       }
     }
   }
   
   /// After resolving the value for a field, it is completed by ensuring it adheres to the expected return type. If the return type is another Object type, then the field execution process continues recursively.
-  private func complete<Accumulator: GraphQLResultAccumulator>(value: JSONValue, ofType returnType: GraphQLOutputType, info: GraphQLResolveInfo, accumulator: Accumulator) throws -> Promise<Accumulator.PartialResult> {
+  private func complete<Accumulator: GraphQLResultAccumulator>(value: JSONValue, ofType returnType: GraphQLOutputType, info: GraphQLResolveInfo, accumulator: Accumulator) throws -> ResultOrPromise<Accumulator.PartialResult> {
     if case .nonNull(let innerType) = returnType {
       if value is NSNull {
-        return Promise(rejected: JSONDecodingError.nullValue)
+        return .result(.failure(JSONDecodingError.nullValue))
       }
       
       return try complete(value: value, ofType: innerType, info: info, accumulator: accumulator)
     }
     
     if value is NSNull {
-      return Promise { try accumulator.acceptNullValue(info: info) }
+      return ResultOrPromise { try accumulator.acceptNullValue(info: info) }
     }
     
     switch returnType {
     case .scalar:
-      return Promise { try accumulator.accept(scalar: value, info: info) }
+      return ResultOrPromise { try accumulator.accept(scalar: value, info: info) }
     case .list(let innerType):
-      guard let array = value as? [JSONValue] else { return Promise(rejected: JSONDecodingError.wrongType) }
+      guard let array = value as? [JSONValue] else { return .result(.failure(JSONDecodingError.wrongType)) }
       
-      return try whenAll(array.enumerated().map { index, element -> Promise<Accumulator.PartialResult> in
+      return try whenAll(array.enumerated().map { index, element -> ResultOrPromise<Accumulator.PartialResult> in
         var info = info
         
         let indexSegment = String(index)
@@ -239,7 +256,7 @@ public final class GraphQLExecutor {
         return try accumulator.accept(list: completedArray, info: info)
       }
     case .object:
-      guard let object = value as? JSONObject else { return Promise(rejected: JSONDecodingError.wrongType) }
+      guard let object = value as? JSONObject else { return .result(.failure(JSONDecodingError.wrongType)) }
       
       // The merged selection set is a list of fields from all sub‐selection sets of the original fields.
       let selections = mergeSelectionSets(for: info.fields)
@@ -257,11 +274,11 @@ public final class GraphQLExecutor {
   }
   
   /// When fields are selected multiple times, their selection sets are merged together when completing the value in order to continue execution of the sub‐selection sets.
-  private func mergeSelectionSets(for fields: [Field]) -> [Selection] {
-    var selections: [Selection] = []
+  private func mergeSelectionSets(for fields: [GraphQLField]) -> [GraphQLSelection] {
+    var selections: [GraphQLSelection] = []
     for field in fields {
-      if case let .object(fieldSelectionSet) = field.type.namedType {
-        selections.append(contentsOf: fieldSelectionSet.selections)
+      if case let .object(fieldSelections) = field.type.namedType {
+        selections.append(contentsOf: fieldSelections)
       }
     }
     return selections
