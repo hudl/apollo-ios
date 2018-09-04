@@ -1,5 +1,7 @@
-import Apollo
 import SQLite
+#if !COCOAPODS
+import Apollo
+#endif
 
 public enum SQLiteNormalizedCacheError: Error {
   case invalidRecordEncoding(record: String)
@@ -31,6 +33,12 @@ public final class SQLiteNormalizedCache: NormalizedCache {
     }
   }
 
+  public func clear() -> Promise<Void> {
+    return Promise {
+      return try clearRecords()
+    }
+  }
+
   private let db: Connection
   private let records = Table("records")
   private let id = Expression<Int64>("_id")
@@ -51,7 +59,7 @@ public final class SQLiteNormalizedCache: NormalizedCache {
       table.column(key, unique: true)
       table.column(record)
     })
-    try db.run(records.createIndex([key], unique: true, ifNotExists: true))
+    try db.run(records.createIndex(key, unique: true, ifNotExists: true))
   }
 
   private func mergeRecords(records: RecordSet) throws -> Set<CacheKey> {
@@ -74,6 +82,10 @@ public final class SQLiteNormalizedCache: NormalizedCache {
   private func selectRecords(forKeys keys: [CacheKey]) throws -> [Record] {
     let query = records.filter(keys.contains(key))
     return try db.prepare(query).map { try parse(row: $0) }
+  }
+
+  private func clearRecords() throws {
+    try db.run(records.delete())
   }
 
   private func parse(row: Row) throws -> Record {

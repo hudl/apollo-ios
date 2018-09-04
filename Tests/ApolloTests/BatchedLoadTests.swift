@@ -31,6 +31,15 @@ private final class MockBatchedNormalizedCache: NormalizedCache {
       }
     }
   }
+	
+  func clear() -> Promise<Void> {
+    return Promise { fulfill, reject in
+      DispatchQueue.global().asyncAfter(deadline: .now() + .milliseconds(1)) {
+        self.records.clear()
+        fulfill(())
+      }
+    }
+  }
 }
 
 class BatchedLoadTests: XCTestCase {  
@@ -102,7 +111,7 @@ class BatchedLoadTests: XCTestCase {
         
         guard let data = result?.data else { XCTFail(); return }
         XCTAssertEqual(data.hero?.name, "R2-D2")
-        let friendsNames = data.hero?.friends?.flatMap { $0?.name }
+        let friendsNames = data.hero?.friends?.compactMap { $0?.name }
         XCTAssertEqual(friendsNames, ["Luke Skywalker", "Han Solo", "Leia Organa"])
         
         expectation.fulfill()
